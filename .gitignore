@@ -1,6 +1,7 @@
 *.tiff
 *.pdf
 results_out/*
+!results_out/.gitkeep
 results_in/TOT_SNPs.txt
 results_in/FREQ_SNPs.cM.txt
 results_in/TOT_SNPs.txt.gz
