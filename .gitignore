@@ -1,0 +1,8 @@
+*.tiff
+*.pdf
+results_out/*
+results_in/TOT_SNPs.txt
+results_in/FREQ_SNPs.cM.txt
+results_in/TOT_SNPs.txt.gz
+results_in/FREQ_SNPs.cM.txt.gz
+results_in/allhaps.zinc.015c.txt.gz
