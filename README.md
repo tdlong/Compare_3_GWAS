@@ -5,6 +5,10 @@ cd /dfs7/adl/tdlong/fly_pool/Compare_3_GWAS
 ## File structure looks like this
 
 ```bash
+├── helperfiles
+│   └── founders.txt
+├── LICENSE
+├── README.md
 ├── results_in
 │   ├── get_data.sh
 │   ├── allhaps.zinc.015c.txt.gz
