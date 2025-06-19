@@ -10,6 +10,7 @@ cd /dfs7/adl/tdlong/fly_pool/Compare_3_GWAS
 │   ├── FREQ_SNPs.cM.txt
 │   └── TOT_SNPs.txt
 ├── results_out
+│   ├── get_data.sh
 │   ├── *cmhHAP.scan.cM.txt
 │   ├── *cmhImputeSNP.scan.cM.txt
 │   └── *cmhrawSNP.scan.txt
@@ -42,6 +43,8 @@ Total SNP COVERAGE per locus = TOT_SNPs.txt
 - CHROM, POS, Cov_Founder_A1, ..., Cov_Founder_B7, Cov_pool_1, ..., Cov_pool_N
 
 Note that the haplotype caller is run with a fix window size in cM (as opposed to kb).
+
+To get the starting data execute "get_data.sh" from results_in (as they are too large to place in github).
 
 ## Impute SNPs from haplotype calls and founder genotypes
 
