@@ -1,16 +1,10 @@
-
 ```bash
 cd /dfs7/adl/tdlong/fly_pool/Compare_3_GWAS
 ```
 ## File structure looks like this
 
 ```bash
-├── helperfiles
-│   └── founders.txt
-├── LICENSE
-├── README.md
 ├── results_in
-│   ├── get_data.sh
 │   ├── allhaps.zinc.015c.txt.gz
 │   ├── FREQ_SNPs.cM.txt
 │   └── TOT_SNPs.txt
@@ -47,8 +41,6 @@ Total SNP COVERAGE per locus = TOT_SNPs.txt
 - CHROM, POS, Cov_Founder_A1, ..., Cov_Founder_B7, Cov_pool_1, ..., Cov_pool_N
 
 Note that the haplotype caller is run with a fix window size in cM (as opposed to kb).
-
-To get the starting data execute "get_data.sh" from results_in (these files are too large for github).
 
 ## Impute SNPs from haplotype calls and founder genotypes
 
@@ -167,13 +159,13 @@ cmhHAPcM = read.table("results_out/cmhHAP.scan.cM.txt")
 cmhImputeSNPcM = read.table("results_out/cmhImputeSNP.scan.cM.txt")
 cmhrawSNP = read.table("results_out/cmhrawSNP.scan.txt")
 
-A = make.Manhattan(cmhHAPcM,       "mlog10p","location","-log10(p)","CMH HAP",         0,40,FALSE, 0.30)
-B = make.Manhattan(cmhImputeSNPcM, "mlog10p","location","-log10(p)","CMH impute SNP",  0,40,FALSE, 0.05)
-C = make.Manhattan(cmhrawSNP,      "mlog10p","location","-log10(p)","CMH raw SNP",     0,40,FALSE, 0.15)
+A = make.Manhattan(cmhHAPcM,       "mlog10p","location","-log10(p)","A",         0,40,FALSE, 0.30)
+B = make.Manhattan(cmhrawSNP,      "mlog10p","location","-log10(p)","B",     0,40,FALSE, 0.15)
+C = make.Manhattan(cmhImputeSNPcM, "mlog10p","location","-log10(p)","C",  0,40,FALSE, 0.05)
 
 library(patchwork)
 tiff("zinc_genetic.tiff", width = 7.5, height = 8, units = "in", res = 600)
-A/C/B
+A/B/C
 graphics.off()
 
 # also save panels separately
@@ -185,6 +177,52 @@ B
 graphics.off()
 tiff("impute_SNP_scan.tiff",width = 8, height = 4.5, units = "in", res = 600)
 C
+graphics.off()
+```
+## Supplementary Figure 1
+
+```R
+library(tidyverse)
+library(gridExtra)
+source("scripts/CustomFunctions.R")
+
+cmhHAPcM = read.table("results_out/cmhHAP.scan.cM.txt")
+cmhImputeSNPcM = read.table("results_out/cmhImputeSNP.scan.cM.txt")
+cmhrawSNP = read.table("results_out/cmhrawSNP.scan.txt")
+
+B_threshold = -log10(0.05/nrow(cmhrawSNP))  #7.435236
+sum(cmhrawSNP$mlog10p > B_threshold)        #642
+
+cmhHAPcM_3R = cmhHAPcM %>% as_tibble() %>% filter(CHROM=="chr3R")
+cmhrawSNP_3R = cmhrawSNP %>% as_tibble() %>% filter(CHROM=="chr3R")
+cmhImputeSNPcM_3R = cmhImputeSNPcM %>% as_tibble() %>% filter(CHROM=="chr3R")
+
+make.Manhattan.3R = function(df,Y,myxlab,myylab,mytitle,threshold,ylimit,physical,plot_symbol_size){
+	ggplot(df, aes(x=cM, y=mlog10p)) +
+			ylab(myylab) +
+			xlab(myxlab) +
+			ggtitle(mytitle) + 
+			theme(plot.title = element_text(vjust = - 10, hjust=0.025, size=10)) +
+			# Show all points
+			geom_point(color="black", alpha=0.8, size=plot_symbol_size) +
+			# threshold
+			{if(threshold != 0) geom_hline(yintercept = threshold, linetype = "dashed", colour = "blue")} +  
+			# custom X axis:
+			scale_y_continuous(expand = c(0, 0), limits=c(0,ylimit) ) +     # remove space between plot area and x axis
+			# Custom the theme:
+			theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank(),panel.background = element_blank()) + 
+			theme(panel.border = element_rect(fill = NA, color = "black"),axis.text=element_text(size=8),axis.title=element_text(size=10)) +
+			theme(legend.position = "none")
+}
+			
+
+A = make.Manhattan.3R(cmhHAPcM_3R,      "mlog10p","location","-log10(p)","A",     0,40,FALSE, 0.15)
+B = make.Manhattan.3R(cmhrawSNP_3R,      "mlog10p","location","-log10(p)","B",     0,15,FALSE, 0.15)
+C = make.Manhattan.3R(cmhImputeSNPcM_3R, "mlog10p","location","-log10(p)","C",  0,40,FALSE, 0.05)
+
+library(patchwork)
+tiff("zinc_genetic_Supp.tiff", width = 7.5, height = 8, units = "in", res = 600)
+A/B/C
 graphics.off()
 ```
 
@@ -222,27 +260,27 @@ for(Delta in c(0,0.025,0.05)){
 
 library(tidyverse)
 df <- do.call("rbind",mylist)
-colnames(df) = c("N","Cov","Delta","Power")
-df = as_tibble(df) %>% mutate(Nf = as.factor(N), Delta=as.factor(Delta))
+colnames(df) = c("Nn","Cov","Delta","Power")
+df = as_tibble(df) %>% mutate(N = as.factor(Nn), Delta=as.factor(Delta))
 
 TP = ggplot(df %>% filter(Delta != 0) ,aes(x=Cov,y=Power)) +
-	geom_line(aes(color = Nf)) +
+	geom_line(aes(color = N)) +
 	facet_wrap(~Delta) +
-	xlab("Short Read Coverage") + 
+	xlab("Coverage") + 
 	theme_bw()
 
 FP = ggplot(df %>% filter(Delta == 0) %>% mutate(FPperM = log10(1e4*Power)) ,aes(x=Cov,y=FPperM)) +
-	geom_line(aes(color = Nf)) +
-	xlab("Short Read Coverage") +
+	geom_line(aes(color = N)) +
+	xlab("Coverage") +
 	ylab("log10(FPs per Million)") + 
 	theme_bw()
 
-# df2 = df %>% filter(Delta == 0) %>% mutate(FPperM = log10(1e4*Power)) %>% mutate(CdN = log(Cov/N,base=2))
-df2 = df %>% filter(Delta == 0) %>% mutate(FPperM = log10(1e4*Power)) %>% mutate(CdN = Cov/N)
+# df2 = df %>% filter(Delta == 0) %>% mutate(FPperM = log10(1e4*Power)) %>% mutate(CdN = log(Cov/Nn,base=2))
+df2 = df %>% filter(Delta == 0) %>% mutate(FPperM = log10(1e4*Power)) %>% mutate(CdN = Cov/Nn)
 df2$FPperM[!is.finite(df2$FPperM)] <- 0
 FPR = ggplot(df2 ,aes(x=CdN,y=FPperM)) +
 	geom_point() +
-	xlab("Coverage / Number of Individuals") +
+	xlab("Coverage / N") +
 	ylab("log10(FPs per Million)") + 
 	theme_bw() +
 	scale_x_continuous(
@@ -257,8 +295,10 @@ FPR = ggplot(df2 ,aes(x=CdN,y=FPperM)) +
 	
 # generally OK if coverage is less than Number of individuals
 library(patchwork)
+TP/ (FP + FPR) + plot_layout(guides = "collect") + plot_annotation(tag_levels = 'A')
+
 tiff("zinc_power_sim.tiff", width = 7.5, height = 7, units = "in", res = 600)
-TP/ (FP + FPR) + plot_layout(guides = "collect")
+TP/ (FP + FPR) + plot_layout(guides = "collect") + plot_annotation(tag_levels = 'A')
 graphics.off()
 ```
 
