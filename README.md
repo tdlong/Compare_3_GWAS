@@ -159,20 +159,20 @@ cmhHAPcM = read.table("results_out/cmhHAP.scan.cM.txt")
 cmhImputeSNPcM = read.table("results_out/cmhImputeSNP.scan.cM.txt")
 cmhrawSNP = read.table("results_out/cmhrawSNP.scan.txt")
 
-A = make.Manhattan(cmhHAPcM,       "mlog10p","location","-log10(p)","A",         0,40,FALSE, 0.30)
-B = make.Manhattan(cmhrawSNP,      "mlog10p","location","-log10(p)","B",     0,40,FALSE, 0.15)
+B = make.Manhattan(cmhHAPcM,       "mlog10p","location","-log10(p)","B",         0,40,FALSE, 0.30)
+A = make.Manhattan(cmhrawSNP,      "mlog10p","location","-log10(p)","A",     0,40,FALSE, 0.15)
 C = make.Manhattan(cmhImputeSNPcM, "mlog10p","location","-log10(p)","C",  0,40,FALSE, 0.05)
 
 library(patchwork)
 tiff("zinc_genetic.tiff", width = 7.5, height = 8, units = "in", res = 600)
-B/A/C
+A/B/C
 graphics.off()
 
 # also save panels separately
-tiff("HAP_scan.tiff",width = 8, height = 4.5, units = "in", res = 600)
+tiff("SNP_scan.tiff",width = 8, height = 4.5, units = "in", res = 600)
 A
 graphics.off()
-tiff("SNP_scan.tiff",width = 8, height = 4.5, units = "in", res = 600)
+tiff("HAP_scan.tiff",width = 8, height = 4.5, units = "in", res = 600)
 B
 graphics.off()
 tiff("impute_SNP_scan.tiff",width = 8, height = 4.5, units = "in", res = 600)
@@ -190,8 +190,8 @@ cmhHAPcM = read.table("results_out/cmhHAP.scan.cM.txt")
 cmhImputeSNPcM = read.table("results_out/cmhImputeSNP.scan.cM.txt")
 cmhrawSNP = read.table("results_out/cmhrawSNP.scan.txt")
 
-B_threshold = -log10(0.05/nrow(cmhrawSNP))  #7.435236
-sum(cmhrawSNP$mlog10p > B_threshold)        #642
+A_threshold = -log10(0.05/nrow(cmhrawSNP))  #7.435236
+sum(cmhrawSNP$mlog10p > A_threshold)        #642
 
 cmhHAPcM_3R = cmhHAPcM %>% as_tibble() %>% filter(CHROM=="chr3R")
 cmhrawSNP_3R = cmhrawSNP %>% as_tibble() %>% filter(CHROM=="chr3R")
@@ -216,13 +216,13 @@ make.Manhattan.3R = function(df,Y,myxlab,myylab,mytitle,threshold,ylimit,physica
 }
 			
 
-A = make.Manhattan.3R(cmhHAPcM_3R,      "mlog10p","location","-log10(p)","A",     0,40,FALSE, 0.15)
-B = make.Manhattan.3R(cmhrawSNP_3R,      "mlog10p","location","-log10(p)","B",     0,15,FALSE, 0.15)
+B = make.Manhattan.3R(cmhHAPcM_3R,      "mlog10p","location","-log10(p)","B",     0,40,FALSE, 0.15)
+A = make.Manhattan.3R(cmhrawSNP_3R,      "mlog10p","location","-log10(p)","A",     0,15,FALSE, 0.15)
 C = make.Manhattan.3R(cmhImputeSNPcM_3R, "mlog10p","location","-log10(p)","C",  0,40,FALSE, 0.05)
 
 library(patchwork)
 tiff("zinc_genetic_Supp.tiff", width = 7.5, height = 8, units = "in", res = 600)
-B/A/C
+A/B/C
 graphics.off()
 ```
 
