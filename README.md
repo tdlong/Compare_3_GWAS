@@ -109,7 +109,7 @@ files are:
 
 these files are ignored via gitignore
 
-## Figure 1
+## Figure 2 
 ```R
 library(tidyverse)
 
@@ -143,7 +143,7 @@ CC = ggplot(df3 %>% group_by(Trt,Rep) %>% summarize(Cov=sum(Cov)),
 library(patchwork)
 NN + CC + plot_layout(guides = "collect")
 ```
-## Figure 2
+## Figure 3 
 
 ```bash
 # salloc -A tdlong_lab --ntasks=4 srun --pty /bin/bash -i 
@@ -165,7 +165,7 @@ C = make.Manhattan(cmhImputeSNPcM, "mlog10p","location","-log10(p)","C",  0,40,F
 
 library(patchwork)
 tiff("zinc_genetic.tiff", width = 7.5, height = 8, units = "in", res = 600)
-A/B/C
+B/A/C
 graphics.off()
 
 # also save panels separately
@@ -222,7 +222,7 @@ C = make.Manhattan.3R(cmhImputeSNPcM_3R, "mlog10p","location","-log10(p)","C",  
 
 library(patchwork)
 tiff("zinc_genetic_Supp.tiff", width = 7.5, height = 8, units = "in", res = 600)
-A/B/C
+B/A/C
 graphics.off()
 ```
 
