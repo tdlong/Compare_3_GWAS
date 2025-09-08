@@ -290,9 +290,9 @@ diff_labs = c("4" = "4%", "8" = "8%")
 cov_labs = c("400" = "400X", "1000" = "1000X", "5000" = "5000X")
 # Create the plot
 p = ggplot(plot_data, aes(x = pos, y = LOD)) +
-  geom_point(data = subset(plot_data3, QTN == FALSE), 
+  geom_point(data = subset(plot_data, QTN == FALSE), 
              color = "darkgrey", alpha = 0.5, size = 1, shape = 16) +
-  geom_point(data = subset(plot_data3, QTN == TRUE), 
+  geom_point(data = subset(plot_data, QTN == TRUE), 
              color = "red", size = 3, shape = 16) +
   facet_grid(diff ~ C, labeller = labeller(diff = diff_labs, C = cov_labs), scales = "free_y") +
   labs(x = "Position", y = "-log10(p)") +
