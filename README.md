@@ -232,7 +232,7 @@ df = df_raw[,sample(1:ncol(df_raw), BN)]
 			Count_1 = Count_1 - diff_N
 			Count_0 = Count_0 + diff_N
 			}
-		QTN_indicator = df_Control[row.names(df_Control)=="62250",] == 1
+		QTN_indicator = df_Control[row.names(df_Control)==QTN_i,] == 1
 		Cases_1 = sample((1:ncol(df_Control))[QTN_indicator], Count_1, replace=TRUE)
 		Cases_0 = sample((1:ncol(df_Control))[!QTN_indicator], Count_0, replace=TRUE)
 		df_Case = cbind(df_Control[,Cases_1],df_Control[,Cases_0])
