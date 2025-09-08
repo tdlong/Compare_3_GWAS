@@ -109,6 +109,203 @@ files are:
 
 these files are ignored via gitignore
 
+## Figure 1
+
+On cluster
+
+```bash
+module load python/3.10.0
+pip install msprime
+python
+
+import msprime
+import numpy as np
+
+# Simulate an ancestral history for 100 diploid samples under the coalescent
+#   with recombination on a 1Mb Drosophila regions.  I use a scaling factor
+#   of Q.  Fly-like recombination rate, mutation rate and population size.
+#   I simulate once, and sample from it, as the coalescent simulation takes
+#   several hours
+Q = 100
+ts = msprime.sim_ancestry(
+        samples=1000,
+        recombination_rate=Q*2e−8,
+        sequence_length=1e9,
+        population_size=1e6/Q,
+        random_seed=123456)
+mts = msprime.sim_mutations(ts, rate=Q*5e-9)
+genotype_matrix = mts.genotype_matrix()
+np.savetxt('genotype_matrix.txt',genotype_matrix)
+
+# Process the coalescent output and save
+module load R/4.2.2
+R
+library(tidyverse)
+xx=read.table("genotype_matrix.txt")
+xx <- xx %>% mutate(across(everything(), as.integer))
+write_rds(xx, "genos.rds")
+# Shape: (num_variants, num_samples)
+```
+On desktop
+
+```bash
+# BN = size to bottleneck the initial coalescent sample to (<=2000)
+#      that is how many allele are used to found the population
+# N = expanded population size.  That is, we found a population 
+#      from BN gametes and then instantaneously expand to size N.
+# C = expected coverage of poolseq, assume site to site variance in
+#      coverage is twice the mean.  This over-dispersed poisson coverage
+#      is common in short read data.
+# diff = percent different in allele frequency between cases and controls
+
+# Read in the simulated data as a df_raw.  It should be a matrix of 1's and 0's.
+# These steps run on a laptop
+
+library(tidyverse)
+N = 10000
+BN_vector = 500
+C_vector = c(400, 1000, 5000)
+diff_vector = c(4, 8)
+
+df_raw = read_rds("genos.rds")
+row.names(df_raw) = 1:nrow(df_raw)
+
+# I have to hold QTN_i constant in some way...
+# This isn't totally easy for smaller BN values (like say 10)
+# Also since I delete rare SNPs, I delete a different set all the time
+# MM = apply(df_raw,1,mean)
+# df_raw_2 = df_raw[MM>0.45 & MM<0.55,]
+
+# so I will hard encode a position to be the causative site
+# this is an intermediate frequency SNP
+QTN_i = "62250"
+
+results_list = list()
+cc = 1
+for (BN in BN_vector){
+df = df_raw[,sample(1:ncol(df_raw), BN)]
+  for (C in C_vector){
+    for (diff in diff_vector){
+
+# Columns are haplotypes and rows are SNPs or sites arranged from left to right
+#    on a chromosome.  The first step is to bottleneck the population to size BN,
+#    this will simply sample the BN columns (alleles) in the df_raw without
+#    replacement to make a new dataframe (df) with BN columns.  
+# What we wish to examine is the properties of a poolseq GWAS of cases vs. controls.
+#    The next step is to create two new dataframes of size N from the columns. The
+#    controls are easy, just create a new dataframe with N columns and S rows by sampling
+#    columns (alleles) at random with replacement from the initial dataframe (df).
+#    The second task is to drop rows from df that represent SNPs at a rare frequency.
+#    So filter rows whose mean is <0.05 or >0.95.  We are left with "S" rows. Call
+#    this df_Control.
+
+		df_Control = df[,sample(1:ncol(df), N, replace = TRUE)]
+		freq = apply(df_Control,1,function(x) sum(x)/N)
+		filter = (freq > 0.05 & freq < 0.95)
+		df_Control = df_Control[filter,]
+		labels = as.numeric(as.character(row.names(df_Control)))
+
+# The cases are more difficult.  To do this we have to pick a SNP (a row) at random
+#     to make it a quantitative trait. We call this SNP the QTN and its indicator is
+#     QTN_i, and we want to estimate the count of the 1 allele in the df_Control
+#     (sum(df_Control[QTN_i]) call this Count_1 (and Count_0 is N - Count_1).  Now
+#     what we are trying to achieve is a second dataframe with N columns, called df_Case,
+#     but we want the frequency of the QTN to be "diff" percent bigger in the new
+#     dataframe if QTN_count is less than N/2 and diff percent smaller otherwise
+#     (so diff could be +tv or -tv).  This means sampling N + diff*N (diif*N has to 
+#     be an int) columns with replacement from df_control CONDITIONAL on those columns
+#     having a "1" at QTN_i row (so just subset df and then draw the sample) and
+#     N - diff*N columns with replacement from df_control CONDITIONAL on those columns 
+#     having a "0" at QTN_i row. The resulting dataframe should have N columns and the
+#     mean of row QTN_i should differ between df_Control and df_Case by diff, with the 
+#     sign of diff being a function of the frequency of QTN_i in the controls.  This would
+#     be a good point in the code to report that frequency and other summaries of what 
+#     is being done.
+
+		Count_1 = sum(df_Control[row.names(df_Control)==QTN_i,])
+		Count_0 = N - Count_1
+		diff_N = round(N*diff/100,0)
+		if(Count_1 < N/2){
+			Count_1 = Count_1 + diff_N
+			Count_0 = Count_0 - diff_N
+			}else{
+			Count_1 = Count_1 - diff_N
+			Count_0 = Count_0 + diff_N
+			}
+		QTN_indicator = df_Control[row.names(df_Control)=="62250",] == 1
+		Cases_1 = sample((1:ncol(df_Control))[QTN_indicator], Count_1, replace=TRUE)
+		Cases_0 = sample((1:ncol(df_Control))[!QTN_indicator], Count_0, replace=TRUE)
+		df_Case = cbind(df_Control[,Cases_1],df_Control[,Cases_0])
+
+# Now we wish to carry out a pool-seq GWAS.  The first step is to create a vector of length
+#      N_SNPs that is the "coverage" to which each SNP is sampled to.  Given an expected
+#      coverage, C, the coverage per SNP is a random overdispersed poisson draw with mean C
+#      and variance twice the poisson expectation. Call this vector cov.  Now for the ith SNP
+#      in df_case and df_control we will we will draw a random sampe of size cov[i] from the
+#      cases and controls (with replacement), conduct a chi-square test for a different in 
+#      frequency between the two samples, and record the -log10(p-value) from that test (call
+#      that LOD). This should be done the tidy way.
+
+		df_summary = data.frame(cov = rnbinom(nrow(df_Control), size=C, mu=C),
+			f_Control = apply(df_Control,1,mean),
+			f_Case = apply(df_Case,1,mean)
+			)
+		LOD = function(x){
+			F1 = rbinom(1,x[1],x[2])
+			F2 = rbinom(1,x[1],x[3])
+			M = matrix(c(F1,x[1]-F1,F2,x[1]-F2),nrow=2)
+				# Check if all entries are non-negative and finite
+				if (any(M < 6) || any(!is.finite(M))) {
+					return(NA)
+				}
+			-log10(chisq.test(M)$p.value)
+			}
+		myLOD = apply(df_summary,1,LOD)
+		LL = length(myLOD)
+		results_list[[cc]] = data.frame(BN=rep(BN,LL), C=rep(C,LL),diff=rep(diff,LL),
+			pos=labels, QTN=(labels==QTN_i), LOD=myLOD)
+		cc=cc+1
+		cat("done (BN/C/diff):  ",BN," ",C," ",diff,"\n")
+		}
+	}
+}
+final_df <- do.call(rbind, results_list)
+# Save the final result
+write_rds(final_df,"poolGWAS.rds")
+
+# Now plot the results
+library(tidyverse)
+library(cowplot)
+
+df = read_rds("poolGWAS.rds")
+# number of hits p<1e-5
+df %>% 
+	group_by(BN,C,diff) %>%
+	summarize(N=n(),hits=sum(LOD>5 & !is.na(LOD)))
+# subset, in case I simulated additional parameter space
+plot_data <- df %>%
+	filter(BN==500 & C %in% c(400,1000,5000) & diff %in% c(4,8))
+	
+diff_labs = c("4" = "4%", "8" = "8%")
+cov_labs = c("400" = "400X", "1000" = "1000X", "5000" = "5000X")
+# Create the plot
+p = ggplot(plot_data, aes(x = pos, y = LOD)) +
+  geom_point(data = subset(plot_data3, QTN == FALSE), 
+             color = "darkgrey", alpha = 0.5, size = 1, shape = 16) +
+  geom_point(data = subset(plot_data3, QTN == TRUE), 
+             color = "red", size = 3, shape = 16) +
+  facet_grid(diff ~ C, labeller = labeller(diff = diff_labs, C = cov_labs), scales = "free_y") +
+  labs(x = "Position", y = "-log10(p)") +
+  theme_minimal() +
+  theme(
+  axis.text.x = element_blank(),
+  axis.ticks.x = element_blank(),
+  axis.line.x = element_blank()
+  )
+        
+ggsave("Figure_1.png", plot = p, width = 7.5, height = 4, units = "in", dpi = 300, bg = "white")
+```
+
 ## Figure 2 
 ```R
 library(tidyverse)
@@ -301,5 +498,10 @@ tiff("zinc_power_sim.tiff", width = 7.5, height = 7, units = "in", res = 600)
 TP/ (FP + FPR) + plot_layout(guides = "collect") + plot_annotation(tag_levels = 'A')
 graphics.off()
 ```
+
+
+
+
+
 
 
