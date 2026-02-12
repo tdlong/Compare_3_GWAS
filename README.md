@@ -339,9 +339,9 @@ CC = ggplot(df3 %>% group_by(Trt,Rep) %>% summarize(Cov=sum(Cov)),
 	
 library(patchwork)
 F2 = NN + CC + plot_layout(guides = "collect")
-tiff("Figure_2.tiff", width = 8, height = 4.5, units = "in", res = 300)
+tiff("Figure_2.tiff", width = 6, height = 3, units = "in", res = 300)
 F2
-graphics_off()
+graphics.off()
 ```
 ## Figure 3 
 
