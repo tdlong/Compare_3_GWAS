@@ -377,6 +377,273 @@ C
 graphics.off()
 ```
 ## Supplementary Figure 1
+```R
+## Simulation of pooled GWAS p-values under three coverage scenarios
+## for both synthetic and outbred populations
+## Output:
+##   - CSV:  poolseq_gwas_simulation.csv
+##   - Plot: poolseq_gwas_simulation.png
+
+set.seed(123)
+
+n_pos <- 10000
+positions <- 1:n_pos
+
+## Helper to ensure -log10(p) is non-negative
+nonneg <- function(x) pmax(x, 0)
+
+## Shared parameters
+artifact_prob <- 0.005          # ~0.5% artifacts across scenarios
+centers <- c(3000, 6000)
+
+## Generate artifact positions ONCE so they're the same across all scenarios
+is_artifact_shared <- runif(n_pos) < artifact_prob
+
+## Helper to generate peak means for n_groups
+## For synthetic: fewer groups with distinct means
+## For outbred: more groups with finer gradation
+generate_peak_means <- function(n_groups, coverage_level, pop_type) {
+  if (pop_type == "synthetic") {
+    if (coverage_level == "low") {
+      # 4 groups - doubled signal strength
+      return(c(2.0, 1.5, 1.0, 0.5))
+    } else if (coverage_level == "medium") {
+      # 5 groups: 4 with signal, 1 uniform (handled separately) - doubled
+      return(c(3.0, 2.2, 1.4, 0.8))
+    } else {  # high
+      # 5 groups: 4 with signal, 1 uniform - doubled
+      return(c(9.0, 7.0, 5.0, 3.0))
+    }
+  } else {  # outbred
+    # 20 groups: create a sequence from high to low
+    # Some groups will be uniform (no signal)
+    n_signal_groups <- if (coverage_level == "low") {
+      15  # 15 with signal, 5 uniform
+    } else if (coverage_level == "medium") {
+      16  # 16 with signal, 4 uniform
+    } else {  # high
+      18  # 18 with signal, 2 uniform
+    }
+    
+    # Generate peak means for signal groups - doubled signal strength
+    if (coverage_level == "low") {
+      max_mean <- 2.0
+      min_mean <- 0.4
+    } else if (coverage_level == "medium") {
+      max_mean <- 3.0
+      min_mean <- 0.6
+    } else {  # high
+      max_mean <- 9.0
+      min_mean <- 1.0
+    }
+    
+    # Create a sequence (higher means for lower group numbers)
+    signal_means <- seq(max_mean, min_mean, length.out = n_signal_groups)
+    return(signal_means)
+  }
+}
+
+## Helper to add true signal around specified centers
+## peak_means: vector of peak means at the centers for the SNP classes
+##             Some groups may be uniform (no signal) - handled by n_uniform
+## signal_sd:  standard deviation around the local mean (controls "line" tightness)
+## n_groups:   total number of groups
+## sd_region:  standard deviation of Gaussian decay
+## n_uniform:  number of groups that should be uniform (no signal)
+add_true_signal <- function(logp,
+                            is_artifact,
+                            peak_means,
+                            signal_sd = 0.3,
+                            n_groups = 4,
+                            sd_region = 500,
+                            n_uniform = 0) {
+  n_signal_groups <- n_groups - n_uniform
+  
+  for (ctr in centers) {
+    # Define a window wide enough that the Gaussian essentially vanishes outside
+    idx_window <- which(abs(positions - ctr) <= 3 * sd_region)
+    if (length(idx_window) == 0) next
+
+    # Randomly split window positions into n_groups (approx 1/n_groups each)
+    groups <- sample(rep(1:n_groups, length.out = length(idx_window)))
+
+    for (g in 1:n_groups) {
+      idx_g <- idx_window[groups == g]
+      if (length(idx_g) == 0) next
+
+      # Skip positions that are already artifacts (keep artifact behavior there)
+      idx_g <- idx_g[!is_artifact[idx_g]]
+      if (length(idx_g) == 0) next
+
+      # If this is a uniform group (no signal), skip it
+      if (g > n_signal_groups) {
+        next  # Keep original uniform p-values for this group
+      }
+
+      mu_peak <- peak_means[g]
+      # Gaussian mean as a function of distance from the center
+      dist <- positions[idx_g] - ctr
+      mu_pos <- mu_peak * exp(- (dist^2) / (2 * sd_region^2))
+
+      # Add some noise around that local mean; small sd to make visible "lines"
+      logp_sig <- nonneg(rnorm(length(idx_g), mean = mu_pos, sd = signal_sd))
+
+      # Signal should not reduce pre-existing strong values:
+      logp[idx_g] <- pmax(logp[idx_g], logp_sig)
+    }
+  }
+  logp
+}
+
+## Main simulation function
+simulate_scenario <- function(coverage_level, pop_type) {
+  p <- runif(n_pos, min = 0, max = 1)
+  logp <- -log10(p)
+
+  ## Artifacts - use shared positions
+  is_artifact <- is_artifact_shared
+  n_art <- sum(is_artifact)
+  if (n_art > 0) {
+    if (coverage_level == "low") {
+      logp_art <- nonneg(rnorm(n_art, mean = 2 * 1.5, sd = 1))
+    } else if (coverage_level == "medium") {
+      logp_art <- nonneg(rnorm(n_art, mean = 2.5 * 1.5, sd = 1.5))
+    } else {  # high
+      logp_art <- nonneg(rnorm(n_art, mean = 5 * 1.5, sd = sqrt(3)))
+    }
+    logp[is_artifact] <- logp_art
+  }
+
+  ## Population-specific parameters
+  if (pop_type == "synthetic") {
+    sd_region <- 500
+    if (coverage_level == "low") {
+      n_groups <- 4
+      n_uniform <- 0
+      signal_sd <- 0.4  # Increased noise
+    } else if (coverage_level == "medium") {
+      n_groups <- 5
+      n_uniform <- 1
+      signal_sd <- 0.5  # Increased noise
+    } else {  # high
+      n_groups <- 5
+      n_uniform <- 1
+      signal_sd <- 0.4  # Increased noise
+    }
+  } else {  # outbred
+    sd_region <- 10  # Returned to original
+    n_groups <- 20
+    if (coverage_level == "low") {
+      n_uniform <- 5
+      signal_sd <- 0.4  # Increased noise
+    } else if (coverage_level == "medium") {
+      n_uniform <- 4
+      signal_sd <- 0.5  # Increased noise
+    } else {  # high
+      n_uniform <- 2
+      signal_sd <- 0.4  # Increased noise
+    }
+  }
+
+  ## Generate peak means
+  peak_means <- generate_peak_means(n_groups, coverage_level, pop_type)
+
+  ## Add true signal
+  logp <- add_true_signal(logp, is_artifact,
+                          peak_means = peak_means,
+                          signal_sd = signal_sd,
+                          n_groups = n_groups,
+                          sd_region = sd_region,
+                          n_uniform = n_uniform)
+
+  p <- 10^(-logp)
+
+  coverage_label <- paste0(toupper(substring(coverage_level, 1, 1)), 
+                           substring(coverage_level, 2), " coverage")
+  pop_label <- if (pop_type == "synthetic") "Synthetic" else "Outbred"
+
+  data.frame(
+    pos   = positions,
+    coverage = coverage_label,
+    population = pop_label,
+    p     = p,
+    logp  = logp,
+    is_artifact = is_artifact
+  )
+}
+
+## Run all simulations
+df_list <- list()
+for (pop in c("synthetic", "outbred")) {
+  for (cov in c("low", "medium", "high")) {
+    df_list[[paste(pop, cov, sep = "_")]] <- simulate_scenario(cov, pop)
+  }
+}
+
+sim_df <- do.call(rbind, df_list)
+
+## Save dataframe
+write.csv(sim_df, file = "poolseq_gwas_simulation.csv", row.names = FALSE)
+
+## Plotting
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2", repos = "https://cloud.r-project.org")
+}
+
+library(ggplot2)
+
+sim_df$coverage <- factor(
+  sim_df$coverage,
+  levels = c("Low coverage", "Medium coverage", "High coverage")
+)
+
+sim_df$population <- factor(
+  sim_df$population,
+  levels = c("Synthetic", "Outbred")
+)
+
+## Calculate y position for arrows (near top of plot - higher)
+max_y <- max(sim_df$logp, na.rm = TRUE)
+arrow_y_start <- max_y * 0.96
+arrow_y_end <- max_y * 0.90
+
+## Create arrow data - both QTL in each panel
+## Structure: for each center, create arrows for all 6 panel combinations
+arrow_df <- expand.grid(
+  x = centers,
+  coverage = c("Low coverage", "Medium coverage", "High coverage"),
+  population = c("Synthetic", "Outbred")
+)
+arrow_df$xend <- arrow_df$x
+arrow_df$y <- arrow_y_start
+arrow_df$yend <- arrow_y_end
+
+p_plot <- ggplot(sim_df, aes(x = pos, y = logp, color = is_artifact)) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  geom_segment(data = arrow_df, 
+               aes(x = x, xend = xend, y = y, yend = yend),
+               color = "lightblue", 
+               linewidth = 2,
+               arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
+               inherit.aes = FALSE) +
+  scale_color_manual(values = c("FALSE" = "black", "TRUE" = "red")) +
+  facet_grid(coverage ~ population, scales = "fixed") +
+  theme_bw() +
+  scale_x_continuous(breaks = NULL) +
+  guides(color = "none") +
+  labs(
+    x = "Genomic position",
+    y = expression(-log[10](p))
+  )
+
+ggsave("poolseq_gwas_simulation.png", p_plot, width = 10, height = 10, dpi = 300)
+
+message("Simulation complete. Outputs written to:",
+        "\n  - poolseq_gwas_simulation.csv",
+        "\n  - poolseq_gwas_simulation.png")
+```
+
+## Supplementary Figure 2
 
 ```R
 library(tidyverse)
