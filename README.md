@@ -338,7 +338,10 @@ CC = ggplot(df3 %>% group_by(Trt,Rep) %>% summarize(Cov=sum(Cov)),
 	ylab("Coverage")
 	
 library(patchwork)
-NN + CC + plot_layout(guides = "collect")
+F2 = NN + CC + plot_layout(guides = "collect")
+tiff("Figure_2.tiff", width = 8, height = 4.5, units = "in", res = 300)
+F2
+graphics_off()
 ```
 ## Figure 3 
 
